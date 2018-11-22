@@ -1,82 +1,64 @@
+/*****************************************************************
+ * Copyright (C) 2017-2018 Robert Valler - All rights reserved.
+ *
+ * This file is part of the project: DevPlatformAppCMake.
+ *
+ * This project can not be copied and/or distributed
+ * without the express permission of the copyright holder
+ *****************************************************************/
+
 #include "mainWindow.h"
 #include "ui_mainWindow.h"
-
-#include "socketClient.h"
-
-// include all C compiled object here
-#if defined(__cplusplus)
-extern "C"
-{
-#endif
-
-//#include "socket_client.h"
-
-#if defined(__cplusplus)
-}
-#endif
-
-void API_Update(void* ptr, size_t size);
-void API_Init_ImageBuffer(size_t size);
-static int clamp(int var);
-
-uchar* ImageBuffer;
-MainWindow* pMainObj;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    pMainObj = this;
-
-    socket_init();
-
+    sock = std::make_unique<socketClient>(this);
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
-    socket_exit();
+    sock.reset();
+    imageDataBuffer.empty();
 }
 
 void MainWindow::update(void* ptr, size_t size)
 {
-    convert_YUV422_to_RGB888((uchar*)ptr, (uint)size, &ImageBuffer[0]);
-
-    QImage tmpQImg(ImageBuffer, ui->VidWidget->width(), ui->VidWidget->height(), QImage::Format_RGB888);
-
-    ui->VidWidget->image = tmpQImg;
-    ui->VidWidget->update();
+    convert_YUV422_to_RGB888( static_cast<uchar*>(ptr), static_cast<uint>(size), &imageDataBuffer[0]);
+    QImage tmpQImg(&imageDataBuffer[0], ui->VidWidget->width(), ui->VidWidget->height(), QImage::Format_RGB888);
+    ui->VidWidget->updateImage(tmpQImg);
 }
 
-int MainWindow::convert_YUV444_to_RGB888(int y_var, int u_var, int v_var, int* R_var, int* G_var, int* B_var )
-{
-    /*YUV444 = 3 bytes per pixel*/
-
-    int c_var, d_var, e_var;
-
-    c_var = (y_var - 16);
-    d_var = (u_var - 128);
-    e_var = (v_var - 128);
-
-    *R_var = clamp((298 * c_var + 409 * e_var + 128) >> 8);
-    *G_var = clamp((298 * c_var - 100 * d_var - 208 * e_var + 128) >> 8);
-    *B_var = clamp((298 * c_var + 516 * d_var + 128) >> 8);
-
-}
-
-int MainWindow::convert_YUV422_to_RGB888(uchar* pImg_IN, uint size, uchar* pImg_OUT)
+void MainWindow::convert_YUV422_to_RGB888(uchar* pImg_IN, uint size, uchar* pImg_OUT)
 {
     /*  YUV422 = 4 bytes per 2 pixels
         RGB = 3 bytes per pixel*/
 
+    std::function<void(int, int, int, int*, int*, int*)> convert_YUV444_to_RGB888 =
+            [this](int y_var, int u_var, int v_var, int* R_var, int* G_var, int* B_var)
+    {
+        /*YUV444 = 3 bytes per pixel*/
+
+        int c_var, d_var, e_var;
+
+        c_var = (y_var - 16);
+        d_var = (u_var - 128);
+        e_var = (v_var - 128);
+
+        *R_var = clamp((298 * c_var + 409 * e_var + 128) >> 8);
+        *G_var = clamp((298 * c_var - 100 * d_var - 208 * e_var + 128) >> 8);
+        *B_var = clamp((298 * c_var + 516 * d_var + 128) >> 8);
+    };
+
     int R_var, G_var, B_var;
     int y1_var, y2_var, u_var, v_var;
     uint RGB_arraysize;
-    int i, t;
+    uint t = 0;
+    uint i;
 
-    i = 0;
-    t = 0;
     RGB_arraysize = uint((size / 2) * 3);
 
     for ( i = 0; i < size ; )
@@ -89,15 +71,15 @@ int MainWindow::convert_YUV422_to_RGB888(uchar* pImg_IN, uint size, uchar* pImg_
 
         // RGB 1
         convert_YUV444_to_RGB888(y1_var, u_var, v_var, &R_var, &G_var, &B_var);
-        pImg_OUT[t++] = R_var;
-        pImg_OUT[t++] = G_var;
-        pImg_OUT[t++] = B_var;
+        pImg_OUT[t++] = static_cast<uchar>(R_var);
+        pImg_OUT[t++] = static_cast<uchar>(G_var);
+        pImg_OUT[t++] = static_cast<uchar>(B_var);
 
         // RGB 2
         convert_YUV444_to_RGB888(y2_var, u_var, v_var, &R_var, &G_var, &B_var);
-        pImg_OUT[t++] = R_var;
-        pImg_OUT[t++] = G_var;
-        pImg_OUT[t++] = B_var;
+        pImg_OUT[t++] = static_cast<uchar>(R_var);
+        pImg_OUT[t++] = static_cast<uchar>(G_var);
+        pImg_OUT[t++] = static_cast<uchar>(B_var);
 
         //
         if(( i > size ) ||
@@ -105,11 +87,7 @@ int MainWindow::convert_YUV422_to_RGB888(uchar* pImg_IN, uint size, uchar* pImg_
         {
             break;
         }
-
     }
-
-
-    return 0;
 }
 
 void MainWindow::on_pushButton_clicked()
@@ -127,18 +105,13 @@ void MainWindow::on_pushButton_3_clicked()
     qApp->quit();
 }
 
-void API_Update(void* ptr, size_t size)
-{
-    pMainObj->update(ptr, size);
-}
-
-void API_Init_ImageBuffer(size_t size)
+void MainWindow::API_Init_ImageBuffer(size_t size)
 {
     size = ((size / 2) * 3); // size is for YUV422, need to change to RGB888
-    ImageBuffer = (uchar*)malloc(size);
+    imageDataBuffer.resize(size);
 }
 
-int clamp(int var)
+int MainWindow::clamp(int var)
 {
     if( var < 0 )
         return 0;

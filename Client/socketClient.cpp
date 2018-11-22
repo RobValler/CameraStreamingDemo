@@ -1,50 +1,43 @@
-/*
-    C ECHO client example using sockets
-*/
-#include<stdio.h>	//printf
-#include<string.h>	//strlen
-#include<sys/socket.h>	//socket
-#include<arpa/inet.h>	//inet_addr
-#include <pthread.h>
-#include <stdbool.h>
+/*****************************************************************
+ * Copyright (C) 2017-2018 Robert Valler - All rights reserved.
+ *
+ * This file is part of the project: DevPlatformAppCMake.
+ *
+ * This project can not be copied and/or distributed
+ * without the express permission of the copyright holder
+ *****************************************************************/
+
+#include <stdio.h>	//printf
+#include <string.h>	//strlen
+#include <sys/socket.h>	//socket
+#include <arpa/inet.h>	//inet_addr
 #include <unistd.h> // close socket
 
 #include "mainWindow.h"
+#include "socketClient.h"
 
-typedef struct _HandshakeStruct {
-    int ImgBufferSize;
-}handshake;
-
-
-
-static void* socket_thread_func(void* ptr);
-
-
-pthread_mutex_t socket_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_t socket_thread;
-
-unsigned char* Imgbuffer;
-bool exit_request = false;
-
-int socket_init()
+socketClient::socketClient(MainWindow* ref): refMainWnd(ref)
 {
-    pthread_attr_t attr;
-    pthread_attr_init( &attr );
-    pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
-    pthread_create( &socket_thread, &attr, socket_thread_func, NULL );
-    return 0;
+    exit_request = false;
+    updateFlag = false;
+    t_socketRead = std::thread(&socketClient::f_socketRead, this);
+    t_imageForward = std::thread(&socketClient::f_imageForward, this);
 }
 
-static void* socket_thread_func(void* ptr)
+socketClient::~socketClient()
 {
-    extern void API_Update(void* ptr, size_t size);
-    extern void API_Init_ImageBuffer(size_t size);
+    exit_request = true;
+    t_socketRead.join();
+    t_imageForward.join();
+    imageDataBuffer.empty();
+}
 
-    int read_count, read_total;
-    handshake HS;
+void socketClient::f_socketRead()
+{
+    int read_count;
+
     int sock;
     struct sockaddr_in server;
-
 
     //Create socket
     sock = socket(AF_INET , SOCK_STREAM , 0);
@@ -61,10 +54,10 @@ static void* socket_thread_func(void* ptr)
     server.sin_port = htons( 8888 );
 
     //Connect to remote server
-    if (connect(sock , (struct sockaddr *)&server , sizeof(server)) < 0)
+    if (connect(sock, (struct sockaddr *)&server , sizeof(server)) < 0)
     {
         perror("connect failed. Error");
-        return ptr;
+        return;
     }
 
     puts("Connected\n");
@@ -74,13 +67,13 @@ static void* socket_thread_func(void* ptr)
     if( recv(sock , &HS , sizeof(handshake) , 0) < 0)
     {
         puts("recv failed");
-        return ptr;
+        return;
     }
 
     if(HS.ImgBufferSize <= 0)
     {
         puts("Handshake failed");
-        return ptr;
+        return;
     }
 
     printf("buffer size = %d\n", HS.ImgBufferSize);
@@ -88,53 +81,51 @@ static void* socket_thread_func(void* ptr)
     if( send(sock , &HS , sizeof(handshake) , 0) < 0)
     {
         puts("Send failed");
-        return ptr;
+        return;
     }
 
     // pre loop init
     read_count = 0;
-    Imgbuffer = (unsigned char*)malloc(HS.ImgBufferSize);
-    API_Init_ImageBuffer(HS.ImgBufferSize);
+    imageDataBuffer.resize(HS.ImgBufferSize);
+    refMainWnd->API_Init_ImageBuffer(HS.ImgBufferSize);
+
 
     //keep communicating with server
     while(true)
     {
+        if( exit_request == true)
+            break;
 
-        // received image data
-        read_count = recv(sock, Imgbuffer, HS.ImgBufferSize, MSG_WAITALL);
-        if( read_count < 0)
-        {
+        // received image data from the socket
+        read_count = recv(sock, &imageDataBuffer[0], HS.ImgBufferSize, MSG_WAITALL);
+
+        if( read_count < 0) {
             puts("receive failed");
             //break;
-        }
-        else if( read_count == HS.ImgBufferSize )
-        {
+        } else if( read_count == HS.ImgBufferSize ) {
             read_count = 0;
-            // update the image
-            API_Update((void*) Imgbuffer, (size_t) HS.ImgBufferSize);
+
+            //refMainWnd->update((void*) &imageDataBuffer[0], (size_t) HS.ImgBufferSize);
+            updateFlag = true;
         }
-
-        pthread_mutex_lock(&socket_mutex);
-            if( exit_request == true)
-            {
-                break;
-            }
-        pthread_mutex_unlock(&socket_mutex);
-
     }
-
     close(sock);
-    return ptr;
 }
 
-int socket_exit()
+void socketClient::f_imageForward()
 {
-    pthread_mutex_lock(&socket_mutex);
-        exit_request = true;
-    pthread_mutex_unlock(&socket_mutex);
+    while(true)
+    {
+        if( exit_request == true)
+            break;
 
-    pthread_join(socket_thread, NULL);
+        if(updateFlag){
 
-    free(Imgbuffer);
-    return 0;
+            // send the image data to the image renderer
+            refMainWnd->update((void*) &imageDataBuffer[0], (size_t) HS.ImgBufferSize);
+            updateFlag = false;
+        }
+    }
 }
+
+

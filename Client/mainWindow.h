@@ -1,24 +1,32 @@
+/*****************************************************************
+ * Copyright (C) 2017-2018 Robert Valler - All rights reserved.
+ *
+ * This file is part of the project: DevPlatformAppCMake.
+ *
+ * This project can not be copied and/or distributed
+ * without the express permission of the copyright holder
+ *****************************************************************/
+
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <vector>
+#include "socketClient.h"
 
 namespace Ui {
 class MainWindow;
 }
-
-void API_Update(void* ptr, size_t size);
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
     
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
     void update(void* ptr, size_t size);
-
-private:
+    void API_Init_ImageBuffer(size_t size);
 
 private slots:
     void on_pushButton_clicked();
@@ -26,13 +34,13 @@ private slots:
     void on_pushButton_3_clicked();
 
 private:
+
+    void convert_YUV422_to_RGB888(uchar* pImg_IN, uint size, uchar* pImg_OUT);
+    int clamp(int var);
+
     Ui::MainWindow *ui;
-
-
-protected:
-    int convert_YUV444_to_RGB888(int y_var, int u_var, int v_var, int* R_var, int* G_var, int* B_var );
-    int convert_YUV422_to_RGB888(uchar* pImg_IN, uint size, uchar* pImg_OUT);
-
+    std::unique_ptr<socketClient> sock;
+    std::vector<uchar> imageDataBuffer;
 };
 
 #endif // MAINWINDOW_H
