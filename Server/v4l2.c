@@ -1,4 +1,3 @@
-
 /*
  *  V4L2 video capture example
  *
@@ -9,16 +8,10 @@
  */
 
 #include <pthread.h>
-//#include <x86_64-linux-gnu/bits/pthreadtypes.h>   // for declaration of pthread_t, pthread_attr_t
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-
-//#include <getopt.h>             /* getopt_long() */
-
 #include <fcntl.h>              /* low-level i/o */
 #include <unistd.h>
 #include <errno.h>
@@ -27,24 +20,17 @@
 #include <sys/time.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
-
 #include <stdbool.h>
-
 #include <linux/videodev2.h>
 
+#include "config.h"
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
-
-
-void* v4l2_thread_func(void* ptr);
-pthread_t v4l2_thread;
-pthread_mutex_t v4l2_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 enum io_method {
-        IO_METHOD_READ,
-        IO_METHOD_MMAP,
-        IO_METHOD_USERPTR,
+    IO_METHOD_READ,
+    IO_METHOD_MMAP,
+    IO_METHOD_USERPTR
 };
 
 typedef struct _buffer {
@@ -52,38 +38,35 @@ typedef struct _buffer {
         size_t  length;
 }buffer;
 
-static char            *dev_name;
+static void*            v4l2_thread_func(void* ptr);
+static pthread_t        v4l2_thread;
+static pthread_mutex_t  v4l2_mutex = PTHREAD_MUTEX_INITIALIZER;
 static enum io_method   io = IO_METHOD_MMAP;
 static int              fd = -1;
-buffer          *buffers;
+static buffer           *buffers;
 static unsigned int     n_buffers;
-//static int              out_buf;
 static int              force_format;
-//static int              frame_count = 70;
-static int				ImgBufferSize;
-
-static bool exit_flag = false;
+static unsigned long    ImgBufferSize;
+static bool             exit_flag;
 
 //image buffer
-unsigned char* pImgBuffer;
-unsigned char* pImgData;
+static unsigned char    *pImgBuffer;
 
-
-static void errno_exit(const char *s)
+static int errno_exit(const char *s)
 {
-        fprintf(stderr, "%s error %d, %s\n", s, errno, strerror(errno));
-        exit(EXIT_FAILURE);
+    fprintf(stderr, "%s error %d, %s\n", s, errno, strerror(errno));
+    exit(EXIT_FAILURE);
 }
 
-static int xioctl(int fh, int request, void *arg)
+static int xioctl(int fh, unsigned long request, void *arg)
 {
-        int r;
+    int r;
 
-        do {
-                r = ioctl(fh, request, arg);
-        } while (-1 == r && EINTR == errno);
+    do {
+            r = ioctl(fh, request, arg);
+    } while (-1 == r && EINTR == errno);
 
-        return r;
+    return r;
 }
 
 static void process_image(const void *p, size_t size)
@@ -284,7 +267,7 @@ static void start_capturing(void)
                         buf.memory = V4L2_MEMORY_USERPTR;
                         buf.index = i;
                         buf.m.userptr = (unsigned long)buffers[i].start;
-                        buf.length = buffers[i].length;
+                        buf.length = (__u32)buffers[i].length;
 
                         if (-1 == xioctl(fd, VIDIOC_QBUF, &buf))
                                 errno_exit("VIDIOC_QBUF");
@@ -353,7 +336,7 @@ static void init_mmap(void)
         if (-1 == xioctl(fd, VIDIOC_REQBUFS, &req)) {
                 if (EINVAL == errno) {
                         fprintf(stderr, "%s does not support "
-                                 "memory mapping\n", dev_name);
+                                 "memory mapping\n", videoDeviceID);
                         exit(EXIT_FAILURE);
                 } else {
                         errno_exit("VIDIOC_REQBUFS");
@@ -362,7 +345,7 @@ static void init_mmap(void)
 
         if (req.count < 2) {
                 fprintf(stderr, "Insufficient buffer memory on %s\n",
-                         dev_name);
+                         videoDeviceID);
                 exit(EXIT_FAILURE);
         }
 
@@ -412,7 +395,7 @@ static void init_userp(unsigned int buffer_size)
         if (-1 == xioctl(fd, VIDIOC_REQBUFS, &req)) {
                 if (EINVAL == errno) {
                         fprintf(stderr, "%s does not support "
-                                 "user pointer i/o\n", dev_name);
+                                 "user pointer i/o\n", videoDeviceID);
                         exit(EXIT_FAILURE);
                 } else {
                         errno_exit("VIDIOC_REQBUFS");
@@ -448,7 +431,7 @@ static void init_device(void)
         if (-1 == xioctl(fd, VIDIOC_QUERYCAP, &cap)) {
                 if (EINVAL == errno) {
                         fprintf(stderr, "%s is no V4L2 device\n",
-                                 dev_name);
+                                 videoDeviceID);
                         exit(EXIT_FAILURE);
                 } else {
                         errno_exit("VIDIOC_QUERYCAP");
@@ -457,7 +440,7 @@ static void init_device(void)
 
         if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) {
                 fprintf(stderr, "%s is no video capture device\n",
-                         dev_name);
+                         videoDeviceID);
                 exit(EXIT_FAILURE);
         }
 
@@ -465,7 +448,7 @@ static void init_device(void)
         case IO_METHOD_READ:
                 if (!(cap.capabilities & V4L2_CAP_READWRITE)) {
                         fprintf(stderr, "%s does not support read i/o\n",
-                                 dev_name);
+                                 videoDeviceID);
                         exit(EXIT_FAILURE);
                 }
                 break;
@@ -474,7 +457,7 @@ static void init_device(void)
         case IO_METHOD_USERPTR:
                 if (!(cap.capabilities & V4L2_CAP_STREAMING)) {
                         fprintf(stderr, "%s does not support streaming i/o\n",
-                                 dev_name);
+                                 videoDeviceID);
                         exit(EXIT_FAILURE);
                 }
                 break;
@@ -574,22 +557,22 @@ static void open_device(void)
 {
         struct stat st;
 
-        if (-1 == stat(dev_name, &st)) {
+        if (-1 == stat(videoDeviceID, &st)) {
                 fprintf(stderr, "Cannot identify '%s': %d, %s\n",
-                         dev_name, errno, strerror(errno));
+                         videoDeviceID, errno, strerror(errno));
                 exit(EXIT_FAILURE);
         }
 
         if (!S_ISCHR(st.st_mode)) {
-                fprintf(stderr, "%s is no device\n", dev_name);
+                fprintf(stderr, "%s is no device\n", videoDeviceID);
                 exit(EXIT_FAILURE);
         }
 
-        fd = open(dev_name, O_RDWR /* required */ | O_NONBLOCK, 0);
+        fd = open(videoDeviceID, O_RDWR /* required */ | O_NONBLOCK, 0);
 
         if (-1 == fd) {
                 fprintf(stderr, "Cannot open '%s': %d, %s\n",
-                         dev_name, errno, strerror(errno));
+                         videoDeviceID, errno, strerror(errno));
                 exit(EXIT_FAILURE);
         }
 }
@@ -610,12 +593,8 @@ int init_v4l2()
 
 void* v4l2_thread_func(void* ptr)
 {
-
-
-	dev_name = "/dev/video0";
-
     exit_flag = false;
-    force_format=1;
+    force_format = 1;
 
     printf("Starting video thread!\n");
     open_device();
@@ -626,7 +605,6 @@ void* v4l2_thread_func(void* ptr)
     uninit_device();
     close_device();
 
-
     free(pImgBuffer);
     printf("video thread finished!\n");
 
@@ -636,23 +614,18 @@ void* v4l2_thread_func(void* ptr)
 void exit_v4l2()
 {
     exit_flag = true;
-
     pthread_join(v4l2_thread, NULL);
-
 }
-
 
 void v4l2_get_image(void* ptr)
 {
 	// copy the image buffer to the message buffer
 	pthread_mutex_lock(&v4l2_mutex);
-		memcpy(ptr, pImgBuffer, ImgBufferSize);
-		//memcpy(ptr, pImgData, ImgBufferSize);
+    memcpy(ptr, pImgBuffer, ImgBufferSize);
 	pthread_mutex_unlock(&v4l2_mutex);
-
 }
 
-int v4l2_get_image_size()
+unsigned long v4l2_get_image_size()
 {
 	return ImgBufferSize;
 }

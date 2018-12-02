@@ -1,33 +1,30 @@
-/*
- * server.c
+/*****************************************************************
+ * Copyright (C) 2017-2018 Robert Valler - All rights reserved.
  *
- *  Created on: Feb 5, 2013
- *      Author: robert
- */
+ * This file is part of the project: DevPlatformAppCMake.
+ *
+ * This project can not be copied and/or distributed
+ * without the express permission of the copyright holder
+ *****************************************************************/
 
-#include<stdio.h>
-#include<string.h>	//strlen
-#include<sys/socket.h>
-#include<arpa/inet.h>	//inet_addr
-#include<unistd.h>	//write
+#include <stdio.h>
+#include <string.h>	//strlen
+#include <sys/socket.h>
+#include <arpa/inet.h>	//inet_addr
+#include <unistd.h>	//write
 #include <pthread.h>
-//#include <x86_64-linux-gnu/bits/pthreadtypes.h>   // for declaration of pthread_t, pthread_attr_t
 #include <stdbool.h>
+#include <stdlib.h>
 
 #include "v4l2.h"
 
-static void* socket_thread_func(void* ptr);
-
 typedef struct _HandshakeStruct {
-	int ImgBufferSize;
+    unsigned long ImgBufferSize;
 }handshake;
 
-pthread_mutex_t socket_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_t socket_thread;
-
-bool exit_request = false;
-
-int state;
+static void* socket_thread_func(void* ptr);
+static pthread_t socket_thread;
+static int state;
 
 enum states {
 	STATE_INIT,
@@ -37,10 +34,6 @@ enum states {
 	STATE_RUNNING,
 	STATE_EXIT
 };
-
-
-
-
 
 int socket_init()
 {
@@ -54,35 +47,31 @@ int socket_init()
 int socket_exit()
 {
 	state = STATE_EXIT;
-
-//    pthread_join(socket_thread, NULL);
-
+    pthread_join(socket_thread, NULL);
     return 0;
 }
 
 
 static void* socket_thread_func(void* ptr)
 {
-	int write_count;
-	int bind_err_count, accept_err_count;
-	int socket_desc , client_sock , c;
-	struct sockaddr_in server , client;
+    // init stuff
+    handshake HS_request;
+    handshake HS_result;
+    struct sockaddr_in server;
+    struct sockaddr_in client;
 	unsigned char* client_message = NULL;
-	bool active;
-
-	handshake HS_request;
-	handshake HS_result;
-
-	// init stuff
-	bind_err_count = 0;
+    bool active = true;
+    ssize_t write_count = 0;
+    int accept_err_count = 0;
+    int c = 0;
+    int client_sock = 0;
+    int socket_desc = 0;
+    int bind_err_count = 0;
 	accept_err_count = 0;
 	state = STATE_INIT;
-	active = true;
 
 	while(active)
 	{
-		// loopiness
-
 		switch(state)
 		{
 			case STATE_INIT:
@@ -113,14 +102,12 @@ static void* socket_thread_func(void* ptr)
 						perror("Too many bind errors, exiting!");
 						state = STATE_EXIT;
 					}
-
 				}
 				else
 				{
 					puts("bind done");
 					state = STATE_LISTEN;
 				}
-
 				break;
 			}
 			case STATE_LISTEN:
@@ -149,7 +136,6 @@ static void* socket_thread_func(void* ptr)
 			}
 			case STATE_HANDSHAKE:
 			{
-
 				// handle the handshaking
 				sleep(2);
 
@@ -169,27 +155,25 @@ static void* socket_thread_func(void* ptr)
 					puts("Handshaking OK !");
 					state = STATE_PRE_RUNNING;
 				}
-
 				break;
 			}
 			case STATE_PRE_RUNNING:
 			{
 				// pre loop init
-				client_message = (unsigned char*)malloc(HS_result.ImgBufferSize);
+                client_message = (unsigned char*)malloc((size_t)HS_result.ImgBufferSize);
 				write_count = 0;
 				state = STATE_RUNNING;
 				break;
 			}
 			case STATE_RUNNING:
 			{
-
 				if( write_count == 0 )
 				{
 					v4l2_get_image(client_message);
 				}
 
-				write_count = write(client_sock , (void*)client_message , HS_result.ImgBufferSize);
-				if( write_count == HS_result.ImgBufferSize )
+                write_count = write(client_sock, (void*)client_message, (size_t)HS_result.ImgBufferSize);
+                if( write_count == (ssize_t)HS_result.ImgBufferSize )
 				{
 					write_count = 0;
 				}
@@ -206,7 +190,6 @@ static void* socket_thread_func(void* ptr)
 			case STATE_EXIT:
 			default:
 			{
-
 				fprintf(stderr, "Socket thread finished!\n");
 
 				// clean up

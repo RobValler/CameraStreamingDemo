@@ -7,10 +7,9 @@
  * without the express permission of the copyright holder
  *****************************************************************/
 
-#ifndef SERVER_H_
-#define SERVER_H_
+#ifndef CONFIG_H_
+#define CONFIG_H_
 
-int socket_init();
-int socket_exit();
+const char videoDeviceID[] = "/dev/video0";
 
-#endif /* SERVER_H_ */
+#endif /* CONFIG_H_ */
