@@ -9,15 +9,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pthread -fno-stack-protector")
 #set(Boost_USE_STATIC_RUNTIME OFF)
 #find_package(Boost)
 
-find_package(Qt5Core)
-find_package(Qt5Widgets)
-find_package(Qt5Gui)
+find_package(Protobuf REQUIRED)
+find_package(Qt5Core REQUIRED)
+find_package(Qt5Widgets REQUIRED)
+find_package(Qt5Gui REQUIRED)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
 include_directories(${CMAKE_SOURCE_DIR})
+include_directories(${Protobuf_INCLUDE_DIRS})
+
 
 file(GLOB_RECURSE SOURCES ${CMAKE_SOURCE_DIR}/*.cpp)
 file(GLOB_RECURSE HEADERS ${CMAKE_SOURCE_DIR}/*.h)
@@ -27,5 +30,5 @@ QT5_WRAP_UI(FORMS ${UI})
 
 get_target_property (QT_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${FORMS} ${RESOURCE})
-target_link_libraries(${PROJECT_NAME} Qt5::Widgets)
+target_link_libraries(${PROJECT_NAME} Qt5::Widgets ${Protobuf_LIBRARIES})
 

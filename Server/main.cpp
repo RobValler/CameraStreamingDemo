@@ -7,20 +7,16 @@
  * without the express permission of the copyright holder
  *****************************************************************/
 
-#include<stdio.h>
-#include "server.h"
-#include "v4l2.h"
+#include <stdio.h>
+#include "serv.h"
 
-int main(int argc, char *argv[])
+
+int main()
 {
-	init_v4l2();
-	socket_init();
+    serv s;
 
     /* The program exits after a keypress*/
     getchar();
 
-	socket_exit();
-	exit_v4l2();
-
-	return 0;
+    return 0;
 }
