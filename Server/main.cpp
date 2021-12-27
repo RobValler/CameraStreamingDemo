@@ -7,9 +7,20 @@
  * without the express permission of the copyright holder
  *****************************************************************/
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#include "v4l2.h"
 #include<stdio.h>
 #include "server.h"
-#include "v4l2.h"
+
+#ifdef __cplusplus
+}
+#endif
+
+#include "example.pb.h"
 
 int main(int argc, char *argv[])
 {
