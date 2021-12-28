@@ -12,6 +12,8 @@ set (Wfloat-conversion)
 set (Wfno-stack-protector)
 set (Winconsistent-missing-override)
 
+FIND_PACKAGE(Protobuf REQUIRED)
+
 add_subdirectory(messages)
 add_subdirectory(Server)
 add_subdirectory(Client)

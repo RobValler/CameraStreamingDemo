@@ -1,7 +1,5 @@
 syntax = "proto3";
 
-message camera_data {
-    int32 ID = 1;
-    string name = 2;
-    repeated int32 data = 3 [packed=true];
+message camera_msg {
+    repeated int32 data = 1 [packed=true];
 }

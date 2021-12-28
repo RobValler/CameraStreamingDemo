@@ -9,8 +9,6 @@
 cmake_minimum_required(VERSION 3.15.0)
 project(messages)
 
-FIND_PACKAGE(Protobuf REQUIRED)
-
 set(ProtobufIncludePath ${CMAKE_CURRENT_BINARY_DIR} CACHE INTERNAL /messages)
 include_directories(${ProtobufIncludePath})
 
