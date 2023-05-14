@@ -42,7 +42,7 @@ void my_handler(int)
 //int main(int argc, char *argv[])
 int main()
 {      
-    CCommServer server(server_proto::ETCTPIP);
+    CCommServer server(server_proto::EPT_TCTPIP, server_proto::EST_PROTO);
     camera_msg out;
     std::vector<char> message;
     std::uint32_t size = 0;
@@ -60,6 +60,8 @@ int main()
 	init_v4l2();
     //socket_init();
 
+    server.init();
+
     while(!isInterrupted)
     {
         size = v4l2_get_image_size();
@@ -71,8 +73,12 @@ int main()
         }
 
         if(!server.write(&out)) {
-            std::cout << "messages was not sent = " << messages_sent << std::endl;
+            //std::cout << "messages was not sent = " << messages_sent << std::endl;
             continue;
+        }
+        else
+        {
+            std::cout << "messages sent = " << messages_sent << std::endl;
         }
 
         out.clear_data();

@@ -33,7 +33,7 @@ socketClient::~socketClient()
 
 void socketClient::f_socketRead()
 {
-    CCommClient sock_client(client_proto::ETCTPIP);
+    CCommClient sock_client(client_proto::EPT_TCTPIP, client_proto::EST_PROTO);
     camera_msg in;
     std::uint32_t size;
 
@@ -47,7 +47,8 @@ void socketClient::f_socketRead()
         if( exit_request == true)
             break;
 
-        if(!sock_client.read(&in))
+        int read_size;
+        if(!sock_client.read(&in, read_size))
             break;
 
         size = in.data_size();
